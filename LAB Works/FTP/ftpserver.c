@@ -1,67 +1,65 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-int main()
-{
-  FILE *fp;
-  int sd, newsd, ser, n, a, cli, pid, bd, port, clilen;
 
-  char fileread[100], rcv[100];
+int main() {
+    FILE *fp;
+    int sd, newsd, n, bd;
+    char fileread[100], rcv[100];
+    struct sockaddr_in servaddr, cliaddr;
 
-  struct sockaddr_in servaddr, cliaddr;
+    // Create socket
+    sd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sd < 0)
+        printf("Can't create socket\n");
+    else
+        printf("Socket is created\n");
 
-  sd = socket(AF_INET, SOCK_STREAM, 0);
+    // Set server details
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_port = htons(1234);  // Use htons for portability
+    servaddr.sin_addr.s_addr = INADDR_ANY;
 
-  if (sd < 0)
-    printf("Cant create\n");
-  else
-    printf("Socket is created\n");
+    // Bind
+    bd = bind(sd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+    if (bd < 0)
+        printf("Can't bind\n");
+    else
+        printf("Binded\n");
 
-  servaddr.sin_family = AF_INET;
-  servaddr.sin_port = 1234;
-  servaddr.sin_addr.s_addr = INADDR_ANY;
+    listen(sd, 5);
 
-  a = sizeof(servaddr);
-  bd = bind(sd, (struct sockaddr *)&servaddr, a);
+    socklen_t clilen = sizeof(cliaddr);
+    newsd = accept(sd, (struct sockaddr *)&cliaddr, &clilen);
+    if (newsd < 0)
+        printf("Can't accept\n");
+    else
+        printf("Accepted\n");
 
-  if (bd < 0)
-    printf("Cant bind\n");
-  else
-    printf("Binded\n");
-  listen(sd, 5);
+    // Receive file name
+    n = recv(newsd, rcv, sizeof(rcv) - 1, 0);
+    rcv[n] = '\0';
 
-  clilen = sizeof(cliaddr);
-  newsd = accept(sd, (struct sockaddr *)&cliaddr, &clilen);
-
-  if (newsd < 0)
-    printf("Cant accept\n");
-  else
-    printf("Accepted\n");
-
-  n = recv(newsd, rcv, 100, 0);
-  rcv[n] = '\0';
-  fp = fopen(rcv, "r");
-
-  if (fp == NULL)
-  {
-    send(newsd, "error", 5, 0);
-    close(newsd);
-  }
-
-  else
-  {
-    while (fgets(fileread, sizeof(fileread), fp))
-    {
-      if (send(newsd, fileread, sizeof(fileread), 0) < 0)
-      {
-        printf("Can’t send file contents\n");
-      }
-      sleep(1);
+    fp = fopen(rcv, "r");
+    if (fp == NULL) {
+        send(newsd, "error", 5, 0);
+        close(newsd);
+        return 1;
     }
 
-    return (0);
-  }
+    // Send file contents
+    while (fgets(fileread, sizeof(fileread), fp)) {
+        if (send(newsd, fileread, strlen(fileread), 0) < 0) {
+            printf("Can't send file contents\n");
+        }
+        sleep(1);
+    }
+
+    fclose(fp);
+    close(newsd);
+    close(sd);
+    return 0;
 }
